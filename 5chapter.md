@@ -431,7 +431,7 @@ public void upgradeLevels() throws Exception {
  DB 커넥션을 직접 다룰 떄 DataSource가 필요함으로 DataSource 빈에 대한 DI 설정을 해둬야함   
  스프링이 제공하는 트랜잭션 동기화 클래스인 TransactionSynchronizationManager를 통해 트랜잭션 동기화 작업을 초기화 하도록 함   
  DataSourceUtils에서 제공하는 getConnection() 메소드를 통해 DB 커넥션 생성    
- &nbsp;getConnection() 사용이유: 오브젝트 생성 + 트랜잭션 동기화에 사용하도록 저장소에 바인딩 수행   
+ &nbsp;&nbsp;&nbsp;- getConnection() 사용이유: 오브젝트 생성 + 트랜잭션 동기화에 사용하도록 저장소에 바인딩 수행   
  작업 수행 및 정상처리 Commit, 비정상 rollback 수행
  
 
