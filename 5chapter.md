@@ -330,6 +330,7 @@ private boolean canUpgradeLevel(User user) {
 -----------------
 
 > 테스트용 UserService 대역   
+
  테스트용으로 특별히 만든 UserService로 진행   
  만드는 법: UserService를 상혹하여 테스트에 필요한 기능을 추가하도록 일부 메소드를 오버라이딩 수행   
  
@@ -338,10 +339,12 @@ private boolean canUpgradeLevel(User user) {
  오버라이드된 upgradeLevel()의 경우 기존 기능을 수행하데 미리 지정된 id에서만 강제로 예외를 던지도록 수정   
  
 > 강제 예외 발생을 통한 테스트   
+
  테스트 결과, 네번째일 때 사용자 처리중 예외 발생 했지만 두번째 사용자의 경우 레벨이 BASIC에서 SILVER로 변경 됨
  따라서 실패   
 
-> 테스트 실패의 원인   
+> 테스트 실패의 원인     
+
  원인: 모든 사용자 레벨 업그레이드 작업이 하나의 트랜잭션 안에서 동작하지 않아서   
  
 5.2.2 트랜잭션 경계설정
@@ -349,15 +352,18 @@ private boolean canUpgradeLevel(User user) {
  여러 작업 수행시 뒤에 작업에서 에러 발생시 앞의 작업을 되돌리기 위해 트랜잭션 롤백 수행   
  모든 작업이 완벽히 수행시에는 트랜잭션 커밋 수행
  
-> JDBC 트랜잭션의 트랜잭션 경계설정
+> JDBC 트랜잭션의 트랜잭션 경계설정   
+
  작업 시작시 setAutoCommit(false);로 선언하고 commit() 또는 rollback()으로 트랜잭션 종료하는 것을 트랜잭션의 경계설정이라 부름   
  하나의 DB 커넥션 안에서 만들어지는 트랜잭션을 로컬 트랜잭션이라고 부름   
  
-> UserService와 UserDao의 트랜잭션 문제   
+> UserService와 UserDao의 트랜잭션 문제     
+
  DAO 메소드에서 DB 커넥션을 매번 만들기에 위으 에러가 발생   
  결국 DAO 사용시 비즈니스 로직을 담고 있는 UserService 내에서 진행되는 여러 가지 작업을 하나의 트랜잭션으로 묶는게 불가능해짐   
  
-> 비즈니스 로직 내의 트랜잭션 경계 설정
+> 비즈니스 로직 내의 트랜잭션 경계 설정   
+
  문제 해결을 위해 DAO 메소드 안으로 upgradeLevels()메소드 기능을 옮기는 생각 고려 X -> 비즈니스 로직과 데이터 로직을 한군데에 묶음   
  따라서 트랜잭션 경계설정 작업을 UserService로 가져오도록 함
 ```java
@@ -383,6 +389,7 @@ private void upgradeLevels() throws Exception {
 위의 구조를 유지하기 위해 Connection 오브젝트를 직접 넘기고 주고 받고 해야함   
 
 > UserService 트랜잭션 경계설정의 문제점   
+
  + DB 커넥션을 비롯한 리소스의 깔끔한 처리를 가능하게 했던 JdbcTemplate 를 더 이상 활용 불가   
  + UserService의 모든 메소드에 Connection 파라미터가 추가되어야함   
  + UserDao는 더이상 데이터 액세스 기술에 독립적일 수가 없음   
