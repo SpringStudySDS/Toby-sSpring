@@ -391,7 +391,7 @@ private void upgradeLevels() throws Exception {
 5.2.3 트랜잭션 동기화
 ----------------------
 
-> Connection 파라미터 제거
+> Connection 파라미터 제거   
  트랜잭션 동기화란 UserService에서 트랜잭션을 시작하기 위해 만든 Connection 오브젝트를 특별한 저장소에 보관하고, 이후 호출되는 DAO의 메소드에서는 저장된 Connection을 가져다 사용함   
  해당 방식의 경우 작업 스레드마다 독립적으로 Connection 오브젝트를 저장하고 관리하기에 다중 사용자가 처리하는 서버의 멀티스레드 환경에서도 충돌 X
  
@@ -431,7 +431,7 @@ public void upgradeLevels() throws Exception {
  DB 커넥션을 직접 다룰 떄 DataSource가 필요함으로 DataSource 빈에 대한 DI 설정을 해둬야함   
  스프링이 제공하는 트랜잭션 동기화 클래스인 TransactionSynchronizationManager를 통해 트랜잭션 동기화 작업을 초기화 하도록 함   
  DataSourceUtils에서 제공하는 getConnection() 메소드를 통해 DB 커넥션 생성    
-  getConnection() 사용이유: 오브젝트 생성 + 트랜잭션 동기화에 사용하도록 저장소에 바인딩 수행   
+ &nbsp;getConnection() 사용이유: 오브젝트 생성 + 트랜잭션 동기화에 사용하도록 저장소에 바인딩 수행   
  작업 수행 및 정상처리 Commit, 비정상 rollback 수행
  
 
