@@ -74,9 +74,9 @@ public class User {
 ``` 
 
 테스트를 수정하고 테스트를 수행   
-But 오타에의한 에러 발생
+But 오타에 의한 에러 발생
 SQL의 경우 컴파일 과정에서 에러를 못찾음. 따라서 실행을 해보지 않으면 오류를 찾기 힘듬
-그렇기에 빠리게 실행 가능한 포괄적인 테스트를 만들어두어야함
+그렇기에 빠르게 실행 가능한 포괄적인 테스트를 만들어두어야함
 
 5.1.2 사용자 수정 기능 추가
 ------------------------------
@@ -97,3 +97,140 @@ SQL의 경우 컴파일 과정에서 에러를 못찾음. 따라서 실행을 �
  
 5.1.3 UserService.upgradeLevels()
 ------------------------------
+
+UserDaoJdbc는 사용자 관리 로직를 넣기에 적합하지 않음   
+ 그 이유는 DAO는 데이터를 조작하는 곳이지 비즈니스 로직을 넣는 곳이 아니기에
+ 
+사용자 관리 로직을 담을 클래스 추가 -> UserService   
+태스트 클래스 정의 UserServiceTest   
+
+> UserService 클래스와 빈 등록   
+> UserServiceTest 테스트 클래스   
+> upgradeLevles() 메소드
+ 
+``` java
+public void upgradeLevels() {
+  List<User> users = userDao.getAll();
+  for (User user : users) {
+    Boolean changed = null;
+    if (user.getLevel() == Level.BASIC && user.getLogin() >= 50) {
+      user.setLevel(Level.SILVER);
+      changed = true;
+    }
+    else if (user.getLevel() == Level.SILVER && user.getLogin() >= 30) {
+      user.setLevel(Level.GOLD);
+      changed = true;
+    }
+    else if (user.getLevel() == Lvel.GOLD) { changed = false; }
+    else { changed = false; }
+    if (changed) { userDao.update(user); }
+  }
+}
+```
+
+만들고 테스트 수행 
+
+5.1.4 UserService.add()
+-----------------------
+
+로직 위치   
+처음 가입 사용자는 BASIC 이여야하는데 해당 로직이 없음   
+UserDaoJdbc에 넣기 X -> DB에 정보 넣고 읽는 것에만 관심을 가져야지 비즈니스를 넣기에는 애매함   
+User 클래스에서 level 필드를 Level.BASIC으로 초기화 X -> 처음을 제외하면 무의미한 정보임. 따라서 직접 초기화는 애매함   
+UserService O   
+
+테스트    
+레빌이 미리 있는 경우와 비어있는 경우에 대해 테스트 수행
+
+
+``` java
+public void add(User user) {
+  if (user.getLevel() ==  null) user.setLevel(Level.BASIC);
+  userDao.add(user);
+}
+```
+
+5.1.5 코드 개선
+-----------------------
+
+ 질문   
+ + 코드에 중복된 부분은 없는가?   
+ + 코드가 무엇을 하는 것인지 이해하기 불편하지 않은가?   
+ + 코드가 자신이 있어야 할 자리에 있는가?   
+ + 앞으로 변경이 일어안다면 어떤 것이 있을 수 있고, 그 변화에 쉽게 대응할 수 있게 작성되어 있는가?   
+ 
+ > upgradeLevels() 메소드 코드의 문제점
+  + for 안의 if/elseif/else 블록들을 읽기 불편  
+  + 레벨의 변화 단계와 업그레이드 조건, 조건이 충족됐을 떄 해야할 작업이 섞여 있어 로직 이해 쉽지 않음   
+  + 플래그를 두고 이를 마지막에 확인하여 업데이트 하는 방식도 깔끔해 보이지 않음   
+  
+ > upgradeLevel() 리팩토링
+ 
+  기능을 분리
+  
+``` java
+public void upgradeLevels() {
+  List<User> users = userDao.getAll();
+  for (User user : users) {
+    if (canUpgradeLevel(user)) {
+      upgradeLevel(user);
+    }
+  }
+}
+
+private boolean canUpgradeLevel(User user) {
+	Level currentLevel = user.getLevel(); 
+	switch(currentLevel) {                                   
+  	case BASIC: return (user.getLogin() >= 50); 
+  	case SILVER: return (user.getRecommend() >= 30);
+  	case GOLD: return false;
+  	default: throw new IllegalArgumentException("Unknown Level: " + currentLevel); 
+	}
+}
+
+private void upgradeLevel(User user) {
+	if (user.getLevel() == Level.BASIC) user.setLevel(Level.SILVER);
+	else if (user.getLevel() == Level.SILVER) user.setLevel(Level.GOLD);
+	userDao.update(user)
+}
+```
+
+upgradeLevels 메소드의 문제점 확인   
+ + 다음 단계가 무엇인가 하는 로직과 그때 사용자 오브젝트의 level 필드를 변경해준다는 로직이 함께 있으며 노골적임   
+ + 예외 상황에 대한 처리 X   
+ + GOLD 레벨 사용자의 경우 아무처리 없이 update만 수행 될 것임   
+ + 레벨이 늘어나면 if문이 추가될 것임   
+ 
+ 먼저 다음 레벨이 무엇인지 Level에 적시
+
+``` java
+public enum Level {
+	GOLD(3, null), SILVER(2, GOLD), BASIC(1, SILVER);  
+	
+	private final int value;
+	private final Level next; 
+	
+	Level(int value, Level next) {  
+		this.value = value;
+		this.next = next; 
+	}
+	
+	public int intValue() {
+		return value;
+	}
+	
+	public Level nextLevel() { 
+		return this.next;
+	}
+	
+	public static Level valueOf(int value) {
+		switch(value) {
+  		case 1: return BASIC;
+  		case 2: return SILVER;
+  		case 3: return GOLD;
+  		default: throw new AssertionError("Unknown value: " + value);
+		}
+	}
+}
+
+```
