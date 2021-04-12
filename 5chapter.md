@@ -234,3 +234,205 @@ public enum Level {
 }
 
 ```
+
+다음으로 사용자 정보가 바뀌는 부분을 User로 옮김
+이유: User 내부 정보가 변경되는 것이니 스스로 다루는게 적절함
+``` java
+public void upgradeLevel() {
+	Level nextLevel = this.level.nextLevel();	
+	if (nextLevel == null) { 								
+		throw new IllegalStateException(this.level + "은 업그레이드가 불가능합니다");
+	}
+	else {
+		this.level = nextLevel;
+	}	
+}
+```
+
+nextLevel을 통해 다음 레벨을 받아오고 없을때 예외 처리 수행   
+이런식으로 독립 메소드를 만들 경우 추후에 기타 정보 변경이 필요시 해당 데이터를 이곳에 추가함으로서 해결 가능      
+
+UserService의 upgradeLevel()이 아래와 같이 간결해짐   
+```java
+private void upgradeLevel(User user) {
+	if (user.getLevel() == Level.BASIC) user.setLevel(Level.SILVER);
+	else if (user.getLevel() == Level.SILVER) user.setLevel(Level.GOLD);
+	userDao.update(user)
+}
+```
+위와 같이 리팩토링을 함으로써 객체 지향의 기본 원리인 오브젝트에게 데이터를 요구하지 말고 작업을 요청함을 수행
+
+> User 테스트   
+> UserServiceTest 개선   
+```java
+@Test
+public void upgradeLevels() {
+	userDao.deleteAll();
+	for(User user : users) userDao.add(user);
+	
+	userService.upgradeLevels();
+	
+	checkLevelUpgraded(users.get(0), false);
+	checkLevelUpgraded(users.get(1), true);
+	checkLevelUpgraded(users.get(2), false);
+	checkLevelUpgraded(users.get(3), true);
+	checkLevelUpgraded(users.get(4), false);
+}
+
+private void checkLevelUpgraded(User user, boolean upgraded) {
+	User userUpdate = userDao.get(user.getId());
+	if (upgraded) {
+		assertThat(userUpdate.getLevel(), is(user.getLevel().nextLevel()));
+	}
+	else {
+		assertThat(userUpdate.getLevel(), is(user.getLevel()));
+	}
+}
+```
+기존의 upgradeLevels() 테스트 코드의 경우 테스트 로직이 분형히 드러나지 않는 단점 존재   
+기존 코드에 비해 각 사용자에 대해 업그레이드를 확인하려는 것인지 아닌지 좀 더 이해 할 수 있도록 개선함
+
+
+코드의 중복 부분을 상수로 변경
+
+```java
+
+public static final int MIN_LOGCOUNT_FOR_SILVER = 50;
+public static final int MIN_RECCOMEND_FOR_GOLD = 30;
+
+...
+	
+private boolean canUpgradeLevel(User user) {
+	Level currentLevel = user.getLevel(); 
+	switch(currentLevel) {                                   
+	case BASIC: return (user.getLogin() >= MIN_LOGCOUNT_FOR_SILVER); 
+	case SILVER: return (user.getRecommend() >= MIN_RECCOMEND_FOR_GOLD);
+	case GOLD: return false;
+	default: throw new IllegalArgumentException("Unknown Level: " + currentLevel); 
+	}
+}
+```
+
+상수를 씀으로써 무슨 의도로 넣었는지 쉽게 파악 가능   
+
+레벨 업그레이드 정책을 유연하게 변경 개선 가능   
+예를 들어 연말 이벤트나 평소와 다르게 변경 할 수 있도록 가능   
+이런 경우 사용자 업그레이드 정책을 UserService에서 분리하는 방법을 고려해야함   
+스프링 설정을 통해 평상시에는 정책을 구현한 클래스를 UserService에서 사용하게 하다가 이벤트 때는 새로 업그레이드 한 정책을 구현한 클래스를 따로 만들어 DI 해주면 됨
+
+
+5.2 트랜잭션 서비스 추상화
+--------------------------
+
+요건 추가: 네크워크 문제나 서버 장애시 모두 변경하지 않고 공지후 다음 날에 업그레이드 진행
+
+5.2.1 모 아니면 도
+-----------------
+
+> 테스트용 UserService 대역   
+ 테스트용으로 특별히 만든 UserService로 진행   
+ 만드는 법: UserService를 상혹하여 테스트에 필요한 기능을 추가하도록 일부 메소드를 오버라이딩 수행   
+ 
+ 테스트를 위해 직접 소스를 수정하는건 권고 하지 않으나 상속하여 사용해야하기에 upgradeLevel()의 메소드 권한을 protected로 변경
+ 
+ 오버라이드된 upgradeLevel()의 경우 기존 기능을 수행하데 미리 지정된 id에서만 강제로 예외를 던지도록 수정   
+ 
+> 강제 예외 발생을 통한 테스트   
+ 테스트 결과, 네번째일 때 사용자 처리중 예외 발생 했지만 두번째 사용자의 경우 레벨이 BASIC에서 SILVER로 변경 됨
+ 따라서 실패   
+
+> 테스트 실패의 원인   
+ 원인: 모든 사용자 레벨 업그레이드 작업이 하나의 트랜잭션 안에서 동작하지 않아서   
+ 
+5.2.2 트랜잭션 경계설정
+----------------------
+ 여러 작업 수행시 뒤에 작업에서 에러 발생시 앞의 작업을 되돌리기 위해 트랜잭션 롤백 수행   
+ 모든 작업이 완벽히 수행시에는 트랜잭션 커밋 수행
+ 
+> JDBC 트랜잭션의 트랜잭션 경계설정
+ 작업 시작시 setAutoCommit(false);로 선언하고 commit() 또는 rollback()으로 트랜잭션 종료하는 것을 트랜잭션의 경계설정이라 부름   
+ 하나의 DB 커넥션 안에서 만들어지는 트랜잭션을 로컬 트랜잭션이라고 부름   
+ 
+> UserService와 UserDao의 트랜잭션 문제   
+ DAO 메소드에서 DB 커넥션을 매번 만들기에 위으 에러가 발생   
+ 결국 DAO 사용시 비즈니스 로직을 담고 있는 UserService 내에서 진행되는 여러 가지 작업을 하나의 트랜잭션으로 묶는게 불가능해짐   
+ 
+> 비즈니스 로직 내의 트랜잭션 경계 설정
+ 문제 해결을 위해 DAO 메소드 안으로 upgradeLevels()메소드 기능을 옮기는 생각 고려 X -> 비즈니스 로직과 데이터 로직을 한군데에 묶음   
+ 따라서 트랜잭션 경계설정 작업을 UserService로 가져오도록 함
+```java
+	
+private void upgradeLevels() throws Exception {
+	
+	(1) DB connection 생성
+	(2) 트랜잭션 시작
+	try {
+	  (3) DAO 메소드 호출
+	  (4) 트랜잭션 커밋
+	}
+	catch(Exception e) {
+	  (5) 트랜잭션 롤백
+	  throw e;
+	}
+	finally {
+	  (6) DB connection 종료
+	}
+}
+```
+
+위의 구조를 유지하기 위해 Connection 오브젝트를 직접 넘기고 주고 받고 해야함   
+
+> UserService 트랜잭션 경계설정의 문제점   
+ + DB 커넥션을 비롯한 리소스의 깔끔한 처리를 가능하게 했던 JdbcTemplate 를 더 이상 활용 불가   
+ + UserService의 모든 메소드에 Connection 파라미터가 추가되어야함   
+ + UserDao는 더이상 데이터 액세스 기술에 독립적일 수가 없음   
+ + 테스트 코드에 직접 Connection 오브젝트를 일일이 만들어서 DAO 메소드를 호출하도록 변경 해야함   
+ 
+5.2.3 트랜잭션 동기화
+----------------------
+
+> Connection 파라미터 제거
+ 트랜잭션 동기화란 UserService에서 트랜잭션을 시작하기 위해 만든 Connection 오브젝트를 특별한 저장소에 보관하고, 이후 호출되는 DAO의 메소드에서는 저장된 Connection을 가져다 사용함   
+ 해당 방식의 경우 작업 스레드마다 독립적으로 Connection 오브젝트를 저장하고 관리하기에 다중 사용자가 처리하는 서버의 멀티스레드 환경에서도 충돌 X
+ 
+> 트랜잭션 동기화 적용
+```java
+
+private DataSource dataSource;  			
+
+public void setDataSource(DataSource dataSource) {
+	this.dataSource = dataSource;
+}
+
+public void upgradeLevels() throws Exception {
+	TransactionSynchronizationManager.initSynchronization();  
+	Connection c = DataSourceUtils.getConnection(dataSource); 
+	c.setAutoCommit(false);
+	
+	try {									   
+		List<User> users = userDao.getAll();
+		for (User user : users) {
+			if (canUpgradeLevel(user)) {
+				upgradeLevel(user);
+			}
+		}
+		c.commit();  
+	} catch (Exception e) {    
+		c.rollback();
+		throw e;
+	} finally {
+		DataSourceUtils.releaseConnection(c, dataSource);	
+		TransactionSynchronizationManager.unbindResource(this.dataSource);  
+		TransactionSynchronizationManager.clearSynchronization();  
+	}
+}
+
+```
+ DB 커넥션을 직접 다룰 떄 DataSource가 필요함으로 DataSource 빈에 대한 DI 설정을 해둬야함   
+ 스프링이 제공하는 트랜잭션 동기화 클래스인 TransactionSynchronizationManager를 통해 트랜잭션 동기화 작업을 초기화 하도록 함   
+ DataSourceUtils에서 제공하는 getConnection() 메소드를 통해 DB 커넥션 생성    
+  getConnection() 사용이유: 오브젝트 생성 + 트랜잭션 동기화에 사용하도록 저장소에 바인딩 수행   
+ 작업 수행 및 정상처리 Commit, 비정상 rollback 수행
+ 
+
+ 
