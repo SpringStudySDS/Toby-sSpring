@@ -399,6 +399,7 @@ private void upgradeLevels() throws Exception {
 ----------------------
 
 > Connection 파라미터 제거   
+
  트랜잭션 동기화란 UserService에서 트랜잭션을 시작하기 위해 만든 Connection 오브젝트를 특별한 저장소에 보관하고, 이후 호출되는 DAO의 메소드에서는 저장된 Connection을 가져다 사용함   
  해당 방식의 경우 작업 스레드마다 독립적으로 Connection 오브젝트를 저장하고 관리하기에 다중 사용자가 처리하는 서버의 멀티스레드 환경에서도 충돌 X
  
