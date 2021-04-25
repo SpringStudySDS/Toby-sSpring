@@ -380,5 +380,3 @@ public interface LineCallback<T> {
     }
 ```
 
-![2 Tests Success](.gitbook/assets/2021-04-14-9.55.28.png)
-
