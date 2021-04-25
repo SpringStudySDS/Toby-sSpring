@@ -1,7 +1,3 @@
----
-description: 토비의 스프링 3.1 3장 정리
----
-
 # Template Callback Pattern
 
 ## 들어가면서
